@@ -1785,6 +1785,7 @@ _evhtp_connection_new(evhtp_t * htp, evutil_socket_t sock, evhtp_type type) {
     htparser_set_userdata(connection->parser, connection);
 
     TAILQ_INIT(&connection->pending);
+    TAILQ_INSERT_TAIL(&connection->htp->connections, connection, next);
 
     return connection;
 }
@@ -2885,13 +2886,13 @@ evhtp_bind_socket(evhtp_t * htp, const char * baddr, uint16_t port, int backlog)
 void
 evhtp_callbacks_free(evhtp_callbacks_t * callbacks) {
     evhtp_callback_t * callback;
-    evhtp_callback_t * tmp;
+    evhtp_callback_t * tmp_alias;
 
     if (callbacks == NULL) {
         return;
     }
 
-    TAILQ_FOREACH_SAFE(callback, callbacks, next, tmp) {
+    TAILQ_FOREACH_SAFE(callback, callbacks, next, tmp_alias) {
         TAILQ_REMOVE(callbacks, callback, next);
 
         evhtp_callback_free(callback);
@@ -3557,6 +3558,8 @@ evhtp_connection_free(evhtp_connection_t * connection) {
         evbuffer_free(connection->header_buffer_in);
     }
 
+    TAILQ_REMOVE(&connection->htp->connections, connection, next);
+
     free(connection);
 }     /* evhtp_connection_free */
 
@@ -3692,6 +3695,7 @@ evhtp_new(evbase_t * evbase, void * arg) {
 
     TAILQ_INIT(&htp->vhosts);
     TAILQ_INIT(&htp->aliases);
+    TAILQ_INIT(&htp->connections);
 
     evhtp_set_gencb(htp, _evhtp_default_request_cb, (void *)htp);
 
@@ -3700,7 +3704,8 @@ evhtp_new(evbase_t * evbase, void * arg) {
 
 void
 evhtp_free(evhtp_t * evhtp) {
-    evhtp_alias_t * evhtp_alias, * tmp;
+    evhtp_alias_t * evhtp_alias, * tmp_alias;
+    evhtp_connection_t * conn, * tmp_conn;
 
     if (evhtp == NULL) {
         return;
@@ -3721,12 +3726,16 @@ evhtp_free(evhtp_t * evhtp) {
         evhtp_callbacks_free(evhtp->callbacks);
     }
 
-    TAILQ_FOREACH_SAFE(evhtp_alias, &evhtp->aliases, next, tmp) {
+    TAILQ_FOREACH_SAFE(evhtp_alias, &evhtp->aliases, next, tmp_alias) {
         if (evhtp_alias->alias != NULL) {
             free(evhtp_alias->alias);
         }
         TAILQ_REMOVE(&evhtp->aliases, evhtp_alias, next);
         free(evhtp_alias);
+    }
+
+    TAILQ_FOREACH_SAFE(conn, &evhtp->connections, next, tmp_conn) {
+        evhtp_connection_free(conn);
     }
 
 #ifndef EVHTP_DISABLE_SSL
@@ -3840,6 +3849,7 @@ evhtp_connection_new(evbase_t * evbase, const char * addr, uint16_t port) {
 
     bufferevent_socket_connect(conn->bev,
                                (struct sockaddr *)&sin, sizeof(sin));
+
 
     return conn;
 }

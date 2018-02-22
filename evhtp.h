@@ -287,6 +287,8 @@ struct evhtp_s {
     TAILQ_HEAD(, evhtp_alias_s) aliases;
     TAILQ_HEAD(, evhtp_s) vhosts;
     TAILQ_ENTRY(evhtp_s) next_vhost;
+
+    TAILQ_HEAD(, evhtp_connection_s) connections;
 };
 
 /**
@@ -440,6 +442,7 @@ struct evhtp_connection_s {
     int                          header_complete;  /**< whether the header for the current request is complete. */
 
     TAILQ_HEAD(, evhtp_request_s) pending;         /**< client pending data */
+    TAILQ_ENTRY(evhtp_connection_s) next;
 };
 
 struct evhtp_hooks_s {
